@@ -1,0 +1,37 @@
+name: Build Armbian Banana Pi M1 (Trixie Minimal)
+
+# Isso cria um botão para você disparar o build manualmente quando quiser
+on:
+  workflow_dispatch: 
+
+jobs:
+  armbian-build:
+    name: Compilando a Magia
+    runs-on: ubuntu-latest # VM pura, sem as restrições do Codespaces
+    
+    steps:
+      - name: Baixando o Armbian Build Framework
+        uses: actions/checkout@v4
+        with:
+          repository: armbian/build
+          path: armbian-build
+
+      - name: Executando o Compile.sh (Modo Silencioso/Automático)
+        run: |
+          cd armbian-build
+          # O comando sudo garante os privilégios de loop device
+          sudo ./compile.sh \
+            BOARD=bananapim1 \
+            BRANCH=current \
+            RELEASE=trixie \
+            BUILD_MINIMAL=yes \
+            BUILD_DESKTOP=no \
+            EXPERT=yes \
+            KERNEL_CONFIGURE=no \
+            COMPRESS_OUTPUTIMAGE=img # Gera o .img direto, sem zipar para testarmos rápido
+            
+      - name: Resgatando o Arquivo .img
+        uses: actions/upload-artifact@v4
+        with:
+          name: BananaPi-M1-Trixie-Minimal
+          path: armbian-build/output/images/*.img
