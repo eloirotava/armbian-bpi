@@ -20,8 +20,8 @@ jobs:
         run: |
           cd armbian-build
           # O comando sudo garante os privilégios de loop device
-          sudo ./compile.sh \
-            BOARD=bananapim1 \
+          ./compile.sh \
+            BOARD=bananapi \
             BRANCH=current \
             RELEASE=trixie \
             BUILD_MINIMAL=yes \
