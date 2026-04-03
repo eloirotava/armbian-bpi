@@ -1,15 +1,19 @@
 name: Build Armbian Banana Pi M1 (Trixie Minimal)
 
-# Isso cria um botão para você disparar o build manualmente quando quiser
 on:
   workflow_dispatch: 
 
 jobs:
   armbian-build:
     name: Compilando a Magia
-    runs-on: ubuntu-latest # VM pura, sem as restrições do Codespaces
+    runs-on: ubuntu-latest
     
     steps:
+      - name: Preparando o Tradutor QEMU (Intel -> ARM)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm,arm64
+
       - name: Baixando o Armbian Build Framework
         uses: actions/checkout@v4
         with:
@@ -19,7 +23,6 @@ jobs:
       - name: Executando o Compile.sh (Modo Silencioso/Automático)
         run: |
           cd armbian-build
-          # O comando sudo garante os privilégios de loop device
           ./compile.sh \
             BOARD=bananapi \
             BRANCH=current \
@@ -28,7 +31,7 @@ jobs:
             BUILD_DESKTOP=no \
             EXPERT=yes \
             KERNEL_CONFIGURE=no \
-            COMPRESS_OUTPUTIMAGE=img # Gera o .img direto, sem zipar para testarmos rápido
+            COMPRESS_OUTPUTIMAGE=img
             
       - name: Resgatando o Arquivo .img
         uses: actions/upload-artifact@v4
