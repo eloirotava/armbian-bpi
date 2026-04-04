@@ -1,0 +1,40 @@
+name: Build Armbian Banana Pi M1 (Trixie Minimal)
+
+on:
+  workflow_dispatch: 
+
+jobs:
+  armbian-build:
+    name: Compilando edge
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Preparando o Tradutor QEMU (Intel -> ARM)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm,arm64
+
+      - name: Baixando o Armbian Build Framework
+        uses: actions/checkout@v4
+        with:
+          repository: armbian/build
+          path: armbian-build
+
+      - name: Executando o Compile.sh (Modo Silencioso/Automático)
+        run: |
+          cd armbian-build
+          ./compile.sh \
+            BOARD=bananapi \
+            BRANCH=edge \
+            RELEASE=trixie \
+            BUILD_MINIMAL=yes \
+            BUILD_DESKTOP=no \
+            EXPERT=yes \
+            KERNEL_CONFIGURE=no \
+            COMPRESS_OUTPUTIMAGE=img
+            
+      - name: Resgatando o Arquivo .img
+        uses: actions/upload-artifact@v4
+        with:
+          name: BananaPi-M1-Trixie-Minimal
+          path: armbian-build/output/images/*.img
