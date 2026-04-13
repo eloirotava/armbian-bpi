@@ -11,15 +11,7 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Free Disk Space
-      run: |
-        sudo rm -rf /usr/share/dotnet
-        sudo rm -rf /usr/local/lib/android
-        sudo rm -rf /opt/ghc
-        sudo rm -rf "/usr/local/share/boost"
-        sudo rm -rf /usr/share/swift
-
-    - name: Install Dependencies for ARM64 Cross-Compile
+    - name: Install Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
@@ -27,37 +19,36 @@ jobs:
 
     - name: Download and Extract Kernel
       run: |
-        cd /tmp
         wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.0.tar.xz
         tar -xvf linux-7.0.tar.xz
 
     - name: Configure Kernel
       run: |
-        cd /tmp/linux-7.0
-        # Usando o config de 64-bits (Meson64) que está no seu repositório
-        cp $GITHUB_WORKSPACE/config-6.18.10-current-meson64 .config
+        cd linux-7.0
         
-        # Ajusta o config para a arquitetura arm64 e trata as novidades do 7.0
+        # Pega o config de 64-bits da raiz do repositório
+        cp ../config-6.18.10-current-meson64 .config
+        
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
         
-        # Desativa debug para economizar espaço e tempo
         scripts/config --disable DEBUG_INFO
         scripts/config --disable DEBUG_INFO_BTF
 
     - name: Build Debian Packages
       run: |
-        cd /tmp/linux-7.0
+        cd linux-7.0
         
         export DEB_BUILD_OPTIONS=nocheck
         
-        # Compilação com ARCH=arm64 e o DPKGFLAGS="-d" que você pediu
+        # O sublinhado mágico que estava faltando: DPKG_FLAGS
         make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) bindeb-pkg \
           KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) \
           KDEB_NOSRCPACKAGE=1 \
-          DPKGFLAGS="-d"
+          DPKG_FLAGS="-d"
 
     - name: Upload Debs
       uses: actions/upload-artifact@v4
       with:
         name: linux-7.0-arm64-debs
-        path: /tmp/*.deb
+        # O kernel gera os debs na pasta acima do código-fonte (que agora é a raiz)
+        path: "*.deb"
