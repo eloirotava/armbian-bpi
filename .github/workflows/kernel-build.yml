@@ -19,10 +19,11 @@ jobs:
         sudo rm -rf "/usr/local/share/boost"
         sudo rm -rf /usr/share/swift
 
-    - name: Install Dependencies
+    - name: Install Dependencies for Deb Packaging
       run: |
         sudo apt-get update
         sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
+        libdw-dev \
         gcc-arm-linux-gnueabihf rsync kmod debhelper dwarves
 
     - name: Download and Extract Kernel to /tmp
