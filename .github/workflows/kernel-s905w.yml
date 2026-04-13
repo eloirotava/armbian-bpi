@@ -1,0 +1,54 @@
+name: Build Linux 7.0 Debs (ARM64) s905w
+
+on:
+  workflow_dispatch: 
+
+jobs:
+  build-kernel-arm64:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
+        libdw-dev pkg-config gcc-aarch64-linux-gnu rsync kmod debhelper dwarves
+
+    - name: Download and Extract Kernel
+      run: |
+        wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.0.tar.xz
+        tar -xvf linux-7.0.tar.xz
+
+    - name: Configure Kernel
+      run: |
+        cd linux-7.0
+        
+        # Pega o config de 64-bits da raiz do repositório
+        cp ../config-6.18.10-current-meson64 .config
+        
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+        
+        scripts/config --disable DEBUG_INFO
+        scripts/config --disable DEBUG_INFO_BTF
+
+    - name: Build Debian Packages
+      run: |
+        cd linux-7.0
+        
+        export DEB_BUILD_OPTIONS=nocheck
+        
+        # O sublinhado mágico que estava faltando: DPKG_FLAGS
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) bindeb-pkg \
+          KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) \
+          KDEB_NOSRCPACKAGE=1 \
+          DPKG_FLAGS="-d"
+
+    - name: Upload Debs
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-7.0-arm64-debs
+        # O kernel gera os debs na pasta acima do código-fonte (que agora é a raiz)
+        path: "*.deb"

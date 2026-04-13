@@ -1,10 +1,10 @@
-name: Build Linux 7.0 Debs (ARM64)
+name: Build Linux 7.0 Debs (Banana Pi - ARMHF)
 
 on:
   workflow_dispatch: 
 
 jobs:
-  build-kernel-arm64:
+  build-kernel-armhf:
     runs-on: ubuntu-latest
 
     steps:
@@ -15,7 +15,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
-        libdw-dev pkg-config gcc-aarch64-linux-gnu rsync kmod debhelper dwarves
+        libdw-dev pkg-config gcc-arm-linux-gnueabihf rsync kmod debhelper dwarves
 
     - name: Download and Extract Kernel
       run: |
@@ -26,11 +26,13 @@ jobs:
       run: |
         cd linux-7.0
         
-        # Pega o config de 64-bits da raiz do repositório
-        cp ../config-6.18.10-current-meson64 .config
+        # Pega o seu config sunxi da raiz do repositório
+        cp ../config-7.0.0-rc6-edge-sunxi .config
         
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+        # Ajusta para 32-bit e preenche os NEW do 7.0
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- olddefconfig
         
+        # Mata o debug para o pacote ficar leve
         scripts/config --disable DEBUG_INFO
         scripts/config --disable DEBUG_INFO_BTF
 
@@ -40,8 +42,8 @@ jobs:
         
         export DEB_BUILD_OPTIONS=nocheck
         
-        # O sublinhado mágico que estava faltando: DPKG_FLAGS
-        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) bindeb-pkg \
+        # O sublinhado corrigido: DPKG_FLAGS
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -j$(nproc) bindeb-pkg \
           KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) \
           KDEB_NOSRCPACKAGE=1 \
           DPKG_FLAGS="-d"
@@ -49,6 +51,5 @@ jobs:
     - name: Upload Debs
       uses: actions/upload-artifact@v4
       with:
-        name: linux-7.0-arm64-debs
-        # O kernel gera os debs na pasta acima do código-fonte (que agora é a raiz)
+        name: linux-7.0-armhf-debs
         path: "*.deb"
