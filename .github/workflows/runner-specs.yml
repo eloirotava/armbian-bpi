@@ -1,0 +1,22 @@
+name: Check Runner Specs
+
+on: workflow_dispatch # Para você rodar manualmente quando quiser
+
+jobs:
+  inspect-machine:
+    runs-on: ubuntu-latest
+    steps:
+      - name: CPU Info
+        run: lscpu
+
+      - name: Memory Info
+        run: free -h
+
+      - name: Disk Space
+        run: df -h
+
+      - name: OS Version
+        run: cat /etc/os-release
+
+      - name: Network Info
+        run: ip addr

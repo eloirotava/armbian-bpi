@@ -23,15 +23,14 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
-        libdw-dev \
-        gcc-arm-linux-gnueabihf rsync kmod debhelper dwarves
+        libdw-dev pkg-config gcc-arm-linux-gnueabihf rsync kmod debhelper dwarves
 
     - name: Download and Extract Kernel to /tmp
       run: |
         cd /tmp
         wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.0.tar.xz
         tar -xvf linux-7.0.tar.xz
-        # O diretório agora é /tmp/linux-7.0
+
 
     - name: Configure Kernel
       run: |
@@ -49,8 +48,16 @@ jobs:
     - name: Build Debian Packages
       run: |
         cd /tmp/linux-7.0
-        # Compila usando todos os cores disponíveis
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -j$(nproc) bindeb-pkg KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) DPKGFLAGS="-d"
+        
+        # 1. Ignoramos a checagem de dependências do dpkg (crucial para cross-compile)
+        export DEB_BUILD_OPTIONS=nocheck
+        
+        # 2. KDEB_NOSRCPACKAGE=1 evita que ele tente criar o pacote .tar.gz do código fonte (economiza tempo e erro)
+        # 3. DPKGFLAGS="-d" força o dpkg-buildpackage a pular a verificação de dependências (-d = nodeps)
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -j$(nproc) bindeb-pkg \
+          KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) \
+          KDEB_NOSRCPACKAGE=1 \
+          DPKGFLAGS="-d"
 
     - name: Upload Debs
       uses: actions/upload-artifact@v4
