@@ -1,0 +1,65 @@
+name: Build Linux 7.0 Debs (AMD64)
+
+on:
+  workflow_dispatch: 
+
+jobs:
+  build-kernel-amd64:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Free Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf /usr/share/swift
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
+        libdw-dev pkg-config rsync kmod debhelper dwarves
+
+    - name: Download and Extract Kernel
+      run: |
+        cd /tmp
+        wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.0.tar.xz
+        tar -xvf linux-7.0.tar.xz
+
+    - name: Configure Kernel
+      run: |
+        cd /tmp/linux-7.0
+        
+        # Como o config sunxi é para ARM, aqui usamos o defconfig padrão de x86_64
+        # ou você pode copiar um config específico de amd64 se tiver um no repo.
+        make defconfig
+        
+        # Aplica o que for novo no 7.0
+        make olddefconfig
+        
+        # Desativa debug para caber no disco e compilar rápido
+        scripts/config --disable DEBUG_INFO
+        scripts/config --disable DEBUG_INFO_BTF
+
+    - name: Build Debian Packages
+      run: |
+        cd /tmp/linux-7.0
+        
+        export DEB_BUILD_OPTIONS=nocheck
+        
+        # Mantendo o DPKGFLAGS="-d" conforme sua necessidade
+        make -j$(nproc) bindeb-pkg \
+          KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) \
+          KDEB_NOSRCPACKAGE=1 \
+          DPKGFLAGS="-d"
+
+    - name: Upload Debs
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-7.0-amd64-debs
+        path: /tmp/*.deb
