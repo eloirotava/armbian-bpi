@@ -50,7 +50,7 @@ jobs:
       run: |
         cd /tmp/linux-7.0
         # Compila usando todos os cores disponíveis
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -j$(nproc) bindeb-pkg KDEB_PKGVERSION=$(date +%Y%m%d-%H%M)
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -j$(nproc) bindeb-pkg KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) DPKGFLAGS="-d"
 
     - name: Upload Debs
       uses: actions/upload-artifact@v4
