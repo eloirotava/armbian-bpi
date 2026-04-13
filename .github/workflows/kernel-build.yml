@@ -1,0 +1,58 @@
+name: Build Linux 7.0 Debs
+
+on:
+  workflow_dispatch: # Para você disparar manualmente quando quiser
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Free Disk Space (Aumenta espaço no Runner)
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf /usr/share/swift
+
+    - name: Install Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
+        gcc-arm-linux-gnueabihf rsync kmod debhelper dwarves
+
+    - name: Download and Extract Kernel to /tmp
+      run: |
+        cd /tmp
+        wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.0.tar.xz
+        tar -xvf linux-7.0.tar.xz
+        # O diretório agora é /tmp/linux-7.0
+
+    - name: Configure Kernel
+      run: |
+        cd /tmp/linux-7.0
+        # Pega o config que está na raiz do seu repo (ajuste o nome se necessário)
+        cp $GITHUB_WORKSPACE/config-7.0.0-rc6-edge-sunxi .config
+        
+        # Garante que as novas opções do kernel 7.0 sejam tratadas (usa o default para o que for novo)
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- olddefconfig
+        
+        # DICA: Desativa símbolos de debug para o build caber no disco e ser mais rápido
+        scripts/config --disable DEBUG_INFO
+        scripts/config --disable DEBUG_INFO_BTF
+
+    - name: Build Debian Packages
+      run: |
+        cd /tmp/linux-7.0
+        # Compila usando todos os cores disponíveis
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -j$(nproc) bindeb-pkg KDEB_PKGVERSION=$(date +%Y%m%d-%H%M)
+
+    - name: Upload Debs
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-7.0-arm-debs
+        path: /tmp/*.deb
