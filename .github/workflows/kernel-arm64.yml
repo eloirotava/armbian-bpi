@@ -1,0 +1,63 @@
+name: Build Linux 7.0 Debs (ARM64)
+
+on:
+  workflow_dispatch: 
+
+jobs:
+  build-kernel-arm64:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Free Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /usr/local/lib/android
+        sudo rm -rf /opt/ghc
+        sudo rm -rf "/usr/local/share/boost"
+        sudo rm -rf /usr/share/swift
+
+    - name: Install Dependencies for ARM64 Cross-Compile
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
+        libdw-dev pkg-config gcc-aarch64-linux-gnu rsync kmod debhelper dwarves
+
+    - name: Download and Extract Kernel
+      run: |
+        cd /tmp
+        wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.0.tar.xz
+        tar -xvf linux-7.0.tar.xz
+
+    - name: Configure Kernel
+      run: |
+        cd /tmp/linux-7.0
+        # Usando o config de 64-bits (Meson64) que está no seu repositório
+        cp $GITHUB_WORKSPACE/config-6.18.10-current-meson64 .config
+        
+        # Ajusta o config para a arquitetura arm64 e trata as novidades do 7.0
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- olddefconfig
+        
+        # Desativa debug para economizar espaço e tempo
+        scripts/config --disable DEBUG_INFO
+        scripts/config --disable DEBUG_INFO_BTF
+
+    - name: Build Debian Packages
+      run: |
+        cd /tmp/linux-7.0
+        
+        export DEB_BUILD_OPTIONS=nocheck
+        
+        # Compilação com ARCH=arm64 e o DPKGFLAGS="-d" que você pediu
+        make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j$(nproc) bindeb-pkg \
+          KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) \
+          KDEB_NOSRCPACKAGE=1 \
+          DPKGFLAGS="-d"
+
+    - name: Upload Debs
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-7.0-arm64-debs
+        path: /tmp/*.deb
