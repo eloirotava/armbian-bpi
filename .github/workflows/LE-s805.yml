@@ -23,7 +23,7 @@ jobs:
       - name: Instalando Dependências do Sistema
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python3
+          sudo apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python3 xfonts-utils xsltproc libxml-parser-perl
 
       - name: Clonando LibreELEC-AML (dtechsrv)
         uses: actions/checkout@v4
