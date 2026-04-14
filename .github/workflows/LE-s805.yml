@@ -35,7 +35,7 @@ jobs:
         run: |
           cd LibreELEC-AML
           # Comando exato para a MXQ S805
-          PROJECT=Amlogic DEVICE=S805 ARCH=arm make image
+          PROJECT=S805 DEVICE=HD18Q ARCH=arm make image
           
       - name: Resgatando o Arquivo Temporariamente
         uses: actions/upload-artifact@v4
