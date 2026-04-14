@@ -33,7 +33,7 @@ jobs:
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:18.04 /bin/bash -c "
             # 1. Preparação (Dependências)
             apt-get update && \
-            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl sudo libncurses5-dev libjson-perl gnodejs && \
+            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl sudo libncurses5-dev libjson-perl gawk nodejs && \
             
             # 2. Usuário Builder
             useradd -m -s /bin/bash builder && \
