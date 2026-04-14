@@ -1,4 +1,4 @@
-name: Build LibreELEC 9.2 (S805 - MXQ) - Verificação e Compilação
+name: Build LibreELEC 9.2 (S805 - MXQ) - Com Cache Direto
 
 on:
   workflow_dispatch:
@@ -23,13 +23,24 @@ jobs:
           repository: dtechsrv/LibreELEC-AML
           path: LibreELEC-AML
 
+      - name: O COFRE - Salvando Downloads e Progresso
+        uses: actions/cache@v4
+        with:
+          # Salva a pasta de downloads E a pasta onde a compilação acontece
+          path: |
+            LibreELEC-AML/sources
+            LibreELEC-AML/build.LibreELEC-AML.S805.arm-9.2
+          # A chave usa o ID da rodada. O restore puxa sempre a mais recente.
+          key: libreelec-s805-cache-${{ github.run_id }}
+          restore-keys: |
+            libreelec-s805-cache-
+
       - name: Corrigindo Hash do Wireguard (Remendo de 2020)
         run: |
-          # Substitui o hash antigo pelo novo que você descobriu no log
           sed -i 's/ec08772216da73a2f6a925927ce794fe9686ba169bb774e451d34199db19795c/00aa32dffb87f6273977fe068c17091693d9475a0a96cfa35dbb02ddbe663e7b/g' LibreELEC-AML/packages/network/wireguard-tools/package.mk
           sed -i 's/83dd096f793641a513f8c1f0ea9999b442873e3c7c590b313d155cbe99d0eab9/94abf7aa9827e399e47b2b4ee7ec46537aae9c9e4064c440253fdcbadc6a9884/g' LibreELEC-AML/packages/network/wireguard-linux-compat/package.mk
 
-      - name: A MÁGICA - Validação e Compilação no Ubuntu 18.04
+      - name: A MÁGICA - Compilação Direta no Ubuntu 18.04
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:18.04 /bin/bash -c "
             # 1. Preparação (Dependências)
@@ -40,16 +51,11 @@ jobs:
             useradd -m -s /bin/bash builder && \
             chown -R builder:builder /workspace && \
             
-            # 3. TESTE DE DOWNLOAD (Usando a ferramenta que você achou)
-            # O 'all' diz para ele baixar tudo que está na lista de pacotes
-            echo 'Verificando a lista de compras...' && \
-            sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm ./tools/download-tool' && \
-            
-            # 4. COMPILAÇÃO REAL
-            echo 'Tudo pronto! Começando a fritar o processador...' && \
+            # 3. COMPILAÇÃO REAL (E download sob demanda)
+            echo 'Tudo pronto! Indo direto para a compilação...' && \
             sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm make image' && \
             
-            # 5. Permissões finais
+            # 4. Permissões finais
             chmod -R 777 /workspace
           "
 
