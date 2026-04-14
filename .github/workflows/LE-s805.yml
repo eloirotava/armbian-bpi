@@ -10,20 +10,16 @@ permissions:
 jobs:
   build-libreelec:
     name: Compilando LibreELEC S805
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-latest
+    # A MÁGICA: Roda todo o processo de compilação dentro de um Ubuntu 18.04 isolado
+    container: ubuntu:18.04
 
     steps:
-      - name: Liberando espaço no Runner (Essencial)
+      - name: Instalando Dependências Clássicas (Ubuntu 18.04)
         run: |
-          # Remove ferramentas pesadas que não vamos usar para ganhar de 20GB a 30GB de espaço
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-          sudo apt-get clean
-          df -h
-
-      - name: Instalando Dependências do Sistema
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python3 xfonts-utils xsltproc libxml-parser-perl
+          apt-get update
+          # Sem 'sudo' porque o Docker já roda como root. Adicionado 'python' (Python 2.7)
+          apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl
 
       - name: Clonando LibreELEC-AML (dtechsrv)
         uses: actions/checkout@v4
@@ -31,7 +27,12 @@ jobs:
           repository: dtechsrv/LibreELEC-AML
           path: LibreELEC-AML
 
-      - name: Compilando a Imagem (Paciência, vai demorar!)
+      - name: Corrigindo Permissões do Git no Container
+        run: |
+          # Evita que o git bloqueie a compilação por rodar como root dentro do container
+          git config --global --add safe.directory '*'
+
+      - name: Compilando a Imagem (S805 - HD18Q)
         run: |
           cd LibreELEC-AML
           # Comando exato para a MXQ S805
@@ -61,5 +62,5 @@ jobs:
         with:
           tag_name: "le-s805-build-${{ github.run_number }}"
           name: "LibreELEC S805 (MXQ) - Build #${{ github.run_number }}"
-          body: "Compilação automatizada direto da fonte (dtechsrv) para Amlogic S805."
+          body: "Compilação automatizada direto da fonte (dtechsrv) para Amlogic S805 usando ambiente isolado (Ubuntu 18.04)."
           files: imagens-finais/*.img.gz
