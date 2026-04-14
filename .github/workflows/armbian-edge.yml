@@ -1,13 +1,21 @@
-name: Build Armbian Banana Pi M1 (Trixie Minimal)
+name: Build Armbian Multi-Board (Trixie Minimal)
 
 on:
   workflow_dispatch: 
 
 jobs:
   armbian-build:
-    name: Compilando edge
+    name: Compilando edge (${{ matrix.board }})
     runs-on: ubuntu-latest
     
+    strategy:
+      # fail-fast: false garante que se a compilação de uma placa falhar, 
+      # o GitHub continuará compilando as outras.
+      fail-fast: false 
+      matrix:
+        # Nomes padrão geralmente usados pelo Armbian para essas placas:
+        board: [bananapi, aml-s9xx-box, rk322x-box, aml-s805-mxq]
+
     steps:
       - name: Preparando o Tradutor QEMU (Intel -> ARM)
         uses: docker/setup-qemu-action@v3
@@ -20,11 +28,15 @@ jobs:
           repository: armbian/build
           path: armbian-build
 
+      # DICA: Se você precisar injetar os códigos dos seus drivers portados, 
+      # você pode adicionar um step aqui para copiar seus arquivos .patch 
+      # para a pasta armbian-build/userpatches/kernel/
+
       - name: Executando o Compile.sh (Modo Silencioso/Automático)
         run: |
           cd armbian-build
           ./compile.sh \
-            BOARD=bananapi \
+            BOARD=${{ matrix.board }} \
             BRANCH=edge \
             RELEASE=trixie \
             BUILD_MINIMAL=yes \
@@ -36,5 +48,6 @@ jobs:
       - name: Resgatando o Arquivo .img
         uses: actions/upload-artifact@v4
         with:
-          name: BananaPi-M1-Trixie-Minimal
+          # O nome do artefato muda dinamicamente com base na placa
+          name: Imagem-${{ matrix.board }}-Trixie-Minimal
           path: armbian-build/output/images/*.img
