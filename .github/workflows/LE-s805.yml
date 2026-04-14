@@ -3,23 +3,20 @@ name: Build LibreELEC 9.2 (S805 - MXQ)
 on:
   workflow_dispatch:
 
-# Permissão necessária para o bot criar a Release
 permissions:
   contents: write
 
 jobs:
   build-libreelec:
     name: Compilando LibreELEC S805
+    # O "host" principal agora volta a ser o Ubuntu moderno, pro GitHub não chorar
     runs-on: ubuntu-latest
-    # A MÁGICA: Roda todo o processo de compilação dentro de um Ubuntu 18.04 isolado
-    container: ubuntu:18.04
 
     steps:
-      - name: Instalando Dependências Clássicas (Ubuntu 18.04)
+      - name: Liberando espaço no Runner (Essencial)
         run: |
-          apt-get update
-          # Sem 'sudo' porque o Docker já roda como root. Adicionado 'python' (Python 2.7)
-          apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
 
       - name: Clonando LibreELEC-AML (dtechsrv)
         uses: actions/checkout@v4
@@ -27,22 +24,21 @@ jobs:
           repository: dtechsrv/LibreELEC-AML
           path: LibreELEC-AML
 
-      - name: Corrigindo Permissões do Git no Container
+      - name: A MÁGICA - Compilando isolado no Ubuntu 18.04
+        # Aqui a gente sobe o container velho só para este comando, 
+        # compila tudo, e depois o container morre deixando a imagem gerada na pasta!
         run: |
-          # Evita que o git bloqueie a compilação por rodar como root dentro do container
-          git config --global --add safe.directory '*'
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:18.04 /bin/bash -c "
+            apt-get update && \
+            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl && \
+            cd LibreELEC-AML && \
+            PROJECT=S805 DEVICE=HD18Q ARCH=arm make image
+          "
 
-      - name: Compilando a Imagem (S805 - HD18Q)
-        run: |
-          cd LibreELEC-AML
-          # Comando exato para a MXQ S805
-          PROJECT=S805 DEVICE=HD18Q ARCH=arm make image
-          
-      - name: Resgatando o Arquivo Temporariamente
+      - name: Resgatando o Arquivo
         uses: actions/upload-artifact@v4
         with:
           name: LibreELEC-S805-Imagem
-          # O LibreELEC gera a imagem compactada em .img.gz na pasta target
           path: LibreELEC-AML/target/*.img.gz
 
   publish-release:
@@ -62,5 +58,5 @@ jobs:
         with:
           tag_name: "le-s805-build-${{ github.run_number }}"
           name: "LibreELEC S805 (MXQ) - Build #${{ github.run_number }}"
-          body: "Compilação automatizada direto da fonte (dtechsrv) para Amlogic S805 usando ambiente isolado (Ubuntu 18.04)."
+          body: "Compilação automatizada para Amlogic S805 usando ambiente Docker (Ubuntu 18.04)."
           files: imagens-finais/*.img.gz
