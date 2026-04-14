@@ -33,7 +33,7 @@ jobs:
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:18.04 /bin/bash -c "
             # 1. Preparação (Dependências)
             apt-get update && \
-            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl sudo libncurses5-dev libjson-perl nodejs && \
+            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl sudo libncurses5-dev libjson-perl gnodejs && \
             
             # 2. Usuário Builder
             useradd -m -s /bin/bash builder && \
@@ -42,7 +42,7 @@ jobs:
             # 3. TESTE DE DOWNLOAD (Usando a ferramenta que você achou)
             # O 'all' diz para ele baixar tudo que está na lista de pacotes
             echo 'Verificando a lista de compras...' && \
-            sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm ./tools/download-tool all' && \
+            sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm ./tools/download-tool --all' && \
             
             # 4. COMPILAÇÃO REAL
             echo 'Tudo pronto! Começando a fritar o processador...' && \
