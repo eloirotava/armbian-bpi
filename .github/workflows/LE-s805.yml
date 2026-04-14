@@ -3,13 +3,9 @@ name: Build LibreELEC 9.2 (S805 - MXQ)
 on:
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
   build-libreelec:
     name: Compilando LibreELEC S805
-    # O "host" principal agora volta a ser o Ubuntu moderno, pro GitHub não chorar
     runs-on: ubuntu-latest
 
     steps:
@@ -24,15 +20,15 @@ jobs:
           repository: dtechsrv/LibreELEC-AML
           path: LibreELEC-AML
 
-      - name: A MÁGICA - Compilando isolado no Ubuntu 18.04
-        # Aqui a gente sobe o container velho só para este comando, 
-        # compila tudo, e depois o container morre deixando a imagem gerada na pasta!
+      - name: A MÁGICA - Compilando isolado no Ubuntu 18.04 (Sem Root)
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:18.04 /bin/bash -c "
             apt-get update && \
-            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl && \
-            cd LibreELEC-AML && \
-            PROJECT=S805 DEVICE=HD18Q ARCH=arm make image
+            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl sudo && \
+            useradd -m -s /bin/bash builder && \
+            chown -R builder:builder /workspace && \
+            sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm make image' && \
+            chmod -R 777 /workspace/LibreELEC-AML/target
           "
 
       - name: Resgatando o Arquivo
@@ -40,23 +36,3 @@ jobs:
         with:
           name: LibreELEC-S805-Imagem
           path: LibreELEC-AML/target/*.img.gz
-
-  publish-release:
-    name: Publicar na Aba Releases
-    needs: build-libreelec
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Baixar imagem gerada no job anterior
-        uses: actions/download-artifact@v4
-        with:
-          name: LibreELEC-S805-Imagem
-          path: imagens-finais
-
-      - name: Criar a Release no GitHub
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: "le-s805-build-${{ github.run_number }}"
-          name: "LibreELEC S805 (MXQ) - Build #${{ github.run_number }}"
-          body: "Compilação automatizada para Amlogic S805 usando ambiente Docker (Ubuntu 18.04)."
-          files: imagens-finais/*.img.gz
