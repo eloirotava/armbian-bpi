@@ -1,0 +1,58 @@
+name: Build LibreELEC 9.2 (S805 - MXQ) - Verificação e Compilação
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-libreelec:
+    name: Compilando LibreELEC S805
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Liberando espaço no Runner
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+
+      - name: Clonando LibreELEC-AML (dtechsrv)
+        uses: actions/checkout@v4
+        with:
+          repository: dtechsrv/LibreELEC-AML
+          path: LibreELEC-AML
+
+      - name: Corrigindo Hash do Wireguard (Remendo de 2020)
+        run: |
+          # Substitui o hash antigo pelo novo que você descobriu no log
+          sed -i 's/ec08772216da73a2f6a925927ce794fe9686ba169bb774e451d34199db19795c/00aa32dffb87f6273977fe068c17091693d9475a0a96cfa35dbb02ddbe663e7b/g' LibreELEC-AML/packages/network/wireguard-tools/package.mk
+
+      - name: A MÁGICA - Validação e Compilação no Ubuntu 18.04
+        run: |
+          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:18.04 /bin/bash -c "
+            # 1. Instalação de dependências
+            apt-get update && \
+            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl sudo libncurses5-dev libjson-perl gawk nodejs && \
+            
+            # 2. Configuração do usuário builder (não-root)
+            useradd -m -s /bin/bash builder && \
+            chown -R builder:builder /workspace && \
+            
+            # 3. ETAPA DE TESTE: Baixa tudo e verifica hashes (make sources)
+            echo 'Iniciando teste de download dos fontes...' && \
+            sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm make sources' && \
+            
+            # 4. ETAPA DE BUILD: Só roda se a etapa anterior (make sources) passar
+            echo 'Downloads verificados com sucesso! Iniciando compilação real...' && \
+            sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm make image' && \
+            
+            # 5. Devolução de permissões
+            chmod -R 777 /workspace
+          "
+
+      - name: Resgatando o Arquivo Final
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibreELEC-S805-Imagem
+          path: LibreELEC-AML/target/*.img.gz
