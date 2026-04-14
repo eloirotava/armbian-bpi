@@ -1,0 +1,65 @@
+name: Build LibreELEC 9.2 (S805 - MXQ)
+
+on:
+  workflow_dispatch:
+
+# Permissão necessária para o bot criar a Release
+permissions:
+  contents: write
+
+jobs:
+  build-libreelec:
+    name: Compilando LibreELEC S805
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Liberando espaço no Runner (Essencial)
+        run: |
+          # Remove ferramentas pesadas que não vamos usar para ganhar de 20GB a 30GB de espaço
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h
+
+      - name: Instalando Dependências do Sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python3
+
+      - name: Clonando LibreELEC-AML (dtechsrv)
+        uses: actions/checkout@v4
+        with:
+          repository: dtechsrv/LibreELEC-AML
+          path: LibreELEC-AML
+
+      - name: Compilando a Imagem (Paciência, vai demorar!)
+        run: |
+          cd LibreELEC-AML
+          # Comando exato para a MXQ S805
+          PROJECT=Amlogic DEVICE=S805 ARCH=arm make image
+          
+      - name: Resgatando o Arquivo Temporariamente
+        uses: actions/upload-artifact@v4
+        with:
+          name: LibreELEC-S805-Imagem
+          # O LibreELEC gera a imagem compactada em .img.gz na pasta target
+          path: LibreELEC-AML/target/*.img.gz
+
+  publish-release:
+    name: Publicar na Aba Releases
+    needs: build-libreelec
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Baixar imagem gerada no job anterior
+        uses: actions/download-artifact@v4
+        with:
+          name: LibreELEC-S805-Imagem
+          path: imagens-finais
+
+      - name: Criar a Release no GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "le-s805-build-${{ github.run_number }}"
+          name: "LibreELEC S805 (MXQ) - Build #${{ github.run_number }}"
+          body: "Compilação automatizada direto da fonte (dtechsrv) para Amlogic S805."
+          files: imagens-finais/*.img.gz
