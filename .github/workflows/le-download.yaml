@@ -31,23 +31,24 @@ jobs:
       - name: A MÁGICA - Validação e Compilação no Ubuntu 18.04
         run: |
           docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:18.04 /bin/bash -c "
-            # 1. Instalação de dependências
+            # 1. Preparação (Dependências)
             apt-get update && \
-            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl sudo libncurses5-dev libjson-perl gawk nodejs && \
+            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl sudo libncurses5-dev libjson-perl nodejs && \
             
-            # 2. Configuração do usuário builder (não-root)
+            # 2. Usuário Builder
             useradd -m -s /bin/bash builder && \
             chown -R builder:builder /workspace && \
             
-            # 3. ETAPA DE TESTE: Baixa tudo e verifica hashes (make sources)
-            echo 'Iniciando teste de download dos fontes...' && \
-            sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm make sources' && \
+            # 3. TESTE DE DOWNLOAD (Usando a ferramenta que você achou)
+            # O 'all' diz para ele baixar tudo que está na lista de pacotes
+            echo 'Verificando a lista de compras...' && \
+            sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm ./tools/download-tool all' && \
             
-            # 4. ETAPA DE BUILD: Só roda se a etapa anterior (make sources) passar
-            echo 'Downloads verificados com sucesso! Iniciando compilação real...' && \
+            # 4. COMPILAÇÃO REAL
+            echo 'Tudo pronto! Começando a fritar o processador...' && \
             sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm make image' && \
             
-            # 5. Devolução de permissões
+            # 5. Permissões finais
             chmod -R 777 /workspace
           "
 
