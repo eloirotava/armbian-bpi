@@ -1,0 +1,67 @@
+name: Build Linux 7.0 + SSV6051 (Rockchip RK322x)
+
+on:
+  workflow_dispatch: 
+
+jobs:
+  build-rk322x:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Free Disk Space
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /usr/share/swift
+
+    - name: Install Build Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
+        libdw-dev pkg-config gcc-arm-linux-gnueabihf rsync kmod debhelper dwarves
+
+    - name: Download Kernel 7.0
+      run: |
+        wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.0.tar.xz
+        tar -xvf linux-7.0.tar.xz
+
+    - name: Configure Kernel
+      run: |
+        cd linux-7.0
+        # Usa o config específico que está na raiz do seu repo
+        cp ../config-7.0.0-edge-rockchip .config
+        
+        # Ajusta o config para a versão 7.0 final
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- olddefconfig
+        
+        # Remove símbolos de debug para acelerar o build e diminuir o tamanho dos .deb
+        scripts/config --disable DEBUG_INFO
+        scripts/config --disable DEBUG_INFO_BTF
+
+    - name: Build Debian Packages (Kernel & Headers)
+      run: |
+        cd linux-7.0
+        export DEB_BUILD_OPTIONS=nocheck
+        
+        # O bindeb-pkg gera linux-image, linux-headers e linux-libc-dev
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -j$(nproc) bindeb-pkg \
+          KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) \
+          KDEB_NOSRCPACKAGE=1 \
+          DPKG_FLAGS="-d"
+
+    - name: Build Custom SSV6051 Driver
+      run: |
+        # Clona o seu repo do driver
+        git clone https://github.com/eloirotava/6051.git
+        cd 6051
+        
+        # Compila o módulo apontando para a árvore do kernel que acabamos de configurar
+        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -C ../linux-7.0 M=$(pwd) modules
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: rk322x-kernel-7.0-ssv-driver
+        path: |
+          *.deb
