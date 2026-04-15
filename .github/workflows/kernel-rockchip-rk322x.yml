@@ -49,16 +49,7 @@ jobs:
           KDEB_PKGVERSION=$(date +%Y%m%d-%H%M) \
           KDEB_NOSRCPACKAGE=1 \
           DPKG_FLAGS="-d"
-
-    - name: Build Custom SSV6051 Driver
-      run: |
-        # Clona o seu repo do driver
-        git clone https://github.com/eloirotava/6051.git
-        cd 6051
-        
-        # Compila o módulo apontando para a árvore do kernel que acabamos de configurar
-        make ARCH=arm CROSS_COMPILE=arm-linux-gnueabihf- -C ../linux-7.0 M=$(pwd) modules
-
+          
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
