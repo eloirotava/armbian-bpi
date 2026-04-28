@@ -3,6 +3,9 @@ name: Build Linux 7.0 + SSV6051 (Rockchip RK322x)
 on:
   workflow_dispatch: 
 
+permissions:
+  contents: write
+
 jobs:
   build-rk322x:
     runs-on: ubuntu-latest
@@ -19,7 +22,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y bc build-essential flex bison libssl-dev libelf-dev \
-        libdw-dev pkg-config gcc-arm-linux-gnueabihf rsync kmod debhelper dwarves
+        libdw-dev pkg-config gcc-arm-linux-gnueabihf rsync kmod debhelper dwarves xz-utils
 
     - name: Download Kernel 7.0
       run: |
@@ -50,9 +53,28 @@ jobs:
           KDEB_NOSRCPACKAGE=1 \
           DPKG_FLAGS="-d"
           
+    - name: Compress Debian Packages
+      run: |
+        # Comprime os pacotes gerados na raiz do diretório com compressão máxima
+        xz -z -9 -T0 *.deb
+          
     - name: Upload Artifacts
       uses: actions/upload-artifact@v4
       with:
         name: rk322x-kernel-7.0-ssv-driver
         path: |
-          *.deb
+          *.deb.xz
+
+    - name: Generate Release Tag
+      id: generate_tag
+      run: echo "RELEASE_TAG=v7.0-$(date +%Y%m%d-%H%M)" >> $GITHUB_ENV
+
+    - name: Create Release and Upload
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ env.RELEASE_TAG }}
+        name: Build ${{ env.RELEASE_TAG }}
+        files: |
+          *.deb.xz
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
