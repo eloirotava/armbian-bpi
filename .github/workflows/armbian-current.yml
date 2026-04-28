@@ -1,4 +1,4 @@
-name: Build Armbian Multi-Board (Trixie Minimal)
+name: Build Armbian Multi-Board (Trixie Minimal) Current
 
 on:
   workflow_dispatch: 
