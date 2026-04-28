@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false 
       matrix:
-        board: [bananapi, aml-s9xx-box, rk322x-box, aml-s805-mxq]
+        board: [bananapi, aml-s9xx-box, rk322x-box]
 
     steps:
       - name: Preparando o Tradutor QEMU (Intel -> ARM)
