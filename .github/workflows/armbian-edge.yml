@@ -40,13 +40,13 @@ jobs:
             BUILD_DESKTOP=no \
             EXPERT=yes \
             KERNEL_CONFIGURE=no \
-            COMPRESS_OUTPUTIMAGE=img
+            COMPRESS_OUTPUTIMAGE=xz
             
       - name: Resgatando o Arquivo temporariamente
         uses: actions/upload-artifact@v4
         with:
           name: Imagem-${{ matrix.board }}
-          path: armbian-build/output/images/*.img
+          path: armbian-build/output/images/*.xz
 
   # NOVO JOB: Só roda quando o "armbian-build" terminar todas as placas
   publish-release:
@@ -70,4 +70,4 @@ jobs:
           name: "Armbian Trixie Minimal - Build #${{ github.run_number }}"
           body: "Compilação automatizada via GitHub Actions das imagens minimalistas (edge/trixie)."
           # Faz o upload de tudo que estiver na pasta de imagens
-          files: imagens-finais/*.img
+          files: imagens-finais/*.xz
