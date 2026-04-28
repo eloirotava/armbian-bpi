@@ -1,0 +1,73 @@
+name: Build Armbian Multi-Board (Trixie Minimal)
+
+on:
+  workflow_dispatch: 
+
+# CRÍTICO: Dá permissão ao GitHub Actions para criar a Release
+permissions:
+  contents: write
+
+jobs:
+  armbian-build:
+    name: Compilando current (${{ matrix.board }})
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false 
+      matrix:
+        board: [bananapi, aml-s9xx-box, rk322x-box, aml-s805-mxq]
+
+    steps:
+      - name: Preparando o Tradutor QEMU (Intel -> ARM)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm,arm64
+
+      - name: Baixando o Armbian Build Framework
+        uses: actions/checkout@v4
+        with:
+          repository: armbian/build
+          path: armbian-build
+
+      - name: Executando o Compile.sh
+        run: |
+          cd armbian-build
+          ./compile.sh \
+            BOARD=${{ matrix.board }} \
+            BRANCH=current \
+            RELEASE=trixie \
+            BUILD_MINIMAL=yes \
+            BUILD_DESKTOP=no \
+            EXPERT=yes \
+            KERNEL_CONFIGURE=no \
+            COMPRESS_OUTPUTIMAGE=img
+            
+      - name: Resgatando o Arquivo temporariamente
+        uses: actions/upload-artifact@v4
+        with:
+          name: Imagem-${{ matrix.board }}
+          path: armbian-build/output/images/*.img
+
+  # NOVO JOB: Só roda quando o "armbian-build" terminar todas as placas
+  publish-release:
+    name: Publicar na Aba Releases
+    needs: armbian-build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Baixar todas as imagens geradas pela matriz
+        uses: actions/download-artifact@v4
+        with:
+          path: imagens-finais
+          pattern: Imagem-* # Puxa todos os artefatos que começam com esse nome
+          merge-multiple: true   # Coloca todos os arquivos .img soltos na mesma pasta
+
+      - name: Criar a Release no GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          # Gera uma tag dinâmica baseada no número da execução (ex: build-42)
+          tag_name: "build-${{ github.run_number }}"
+          name: "Armbian Trixie Minimal - Build #${{ github.run_number }}"
+          body: "Compilação automatizada via GitHub Actions das imagens minimalistas (edge/trixie)."
+          # Faz o upload de tudo que estiver na pasta de imagens
+          files: imagens-finais/*.img
