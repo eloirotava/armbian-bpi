@@ -19,7 +19,7 @@ jobs:
 
     - name: Download and Extract Kernel
       run: |
-        wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.0.tar.xz
+        wget https://cdn.kernel.org/pub/linux/kernel/v7.x/linux-7.0.2.tar.xz
         tar -xvf linux-7.0.tar.xz
 
     - name: Configure Kernel
