@@ -17,13 +17,13 @@ jobs:
       matrix:
         include:
           # --- Placas CURRENT (4) ---
-          - board: bananapi
-            branch: current
-          - board: aml-s9xx-box
-            branch: current
-          - board: rk322x-box
-            branch: current
-          - board: mxq-s805
+#          - board: bananapi
+#            branch: current
+#          - board: aml-s9xx-box
+#            branch: current
+#          - board: rk322x-box
+#            branch: current
+          - board: aml-s805-mxq
             branch: current
             
           # --- Placas EDGE (3) ---
