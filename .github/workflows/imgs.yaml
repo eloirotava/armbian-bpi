@@ -1,0 +1,102 @@
+name: Build Armbian Multi-Board (Trixie Minimal) Current e Edge
+
+on:
+  workflow_dispatch: 
+
+# CRÍTICO: Dá permissão ao GitHub Actions para criar a Release
+permissions:
+  contents: write
+
+jobs:
+  armbian-build:
+    name: Compilando ${{ matrix.branch }} (${{ matrix.board }})
+    runs-on: ubuntu-latest
+    
+    strategy:
+      fail-fast: false 
+      matrix:
+        # Usa 'include' para definir os pares exatos de placa e branch (Total: 7 builds)
+        include:
+          # --- Placas CURRENT (4) ---
+#          - board: bananapi
+#            branch: current
+#          - board: aml-s9xx-box
+#            branch: current
+#          - board: rk322x-box
+#            branch: current
+          - board: aml-s805-mxq # Substitua pelo nome exato que o script compile.sh espera, caso seja diferente
+            branch: current
+            
+          # --- Placas EDGE (3) ---
+#          - board: bananapi
+#            branch: edge
+#          - board: aml-s9xx-box
+#            branch: edge
+#          - board: rk322x-box
+#            branch: edge
+
+    steps:
+      - name: Preparando o Tradutor QEMU (Intel -> ARM)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm,arm64
+
+      - name: Baixando o Armbian Build Framework
+        uses: actions/checkout@v4
+        with:
+          repository: armbian/build
+          path: armbian-build
+
+      - name: Executando o Compile.sh
+        run: |
+          cd armbian-build
+          ./compile.sh \
+            BOARD=${{ matrix.board }} \
+            BRANCH=${{ matrix.branch }} \
+            RELEASE=trixie \
+            BUILD_MINIMAL=yes \
+            BUILD_DESKTOP=no \
+            EXPERT=yes \
+            KERNEL_CONFIGURE=no \
+            COMPRESS_OUTPUTIMAGE=xz
+            
+      - name: Compactando os Headers (.deb) com XZ
+        run: |
+          # A imagem já sai compactada pelo COMPRESS_OUTPUTIMAGE=xz
+          # Agora compactamos apenas os pacotes de headers gerados pelo build
+          cd armbian-build/output/debs/
+          xz -z -9 linux-headers-*.deb
+            
+      - name: Resgatando a Imagem e Headers temporariamente
+        uses: actions/upload-artifact@v4
+        with:
+          name: Artefatos-${{ matrix.board }}-${{ matrix.branch }}
+          # Agora o upload inclui a imagem gerada e os headers compactados
+          path: |
+            armbian-build/output/images/*.img.xz
+            armbian-build/output/images/*.xz
+            armbian-build/output/debs/linux-headers-*.deb.xz
+
+  # JOB FINAL: Só roda quando o "armbian-build" terminar as 7 placas
+  publish-release:
+    name: Publicar na Aba Releases
+    needs: armbian-build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Baixar todos os artefatos gerados
+        uses: actions/download-artifact@v4
+        with:
+          path: artefatos-finais
+          pattern: Artefatos-* # Puxa todos os artefatos que começam com esse nome
+          merge-multiple: true   # Coloca todos os arquivos (img.xz e deb.xz) soltos na mesma pasta
+
+      - name: Criar a Release no GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          # Gera uma tag dinâmica baseada no número da execução (ex: build-42)
+          tag_name: "build-${{ github.run_number }}"
+          name: "Armbian Trixie Minimal - Build #${{ github.run_number }}"
+          body: "Compilação automatizada via GitHub Actions das imagens minimalistas e headers (current e edge)."
+          # Faz o upload de tudo que estiver na pasta (.img.xz e .deb.xz)
+          files: artefatos-finais/*.xz
