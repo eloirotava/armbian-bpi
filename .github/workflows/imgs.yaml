@@ -72,7 +72,6 @@ jobs:
           # Não preserva o caminho de pastas, joga todos os arquivos na raiz do artefato
           include-hidden-files: false
           path: |
- #           armbian-build/output/images/*.img.xz
             armbian-build/output/images/*.xz
             armbian-build/output/debs/*.xz
 
