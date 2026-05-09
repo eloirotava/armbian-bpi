@@ -63,7 +63,7 @@ jobs:
         run: |
           sudo chown -R $USER:$USER armbian-build/output/
           cd armbian-build/output/debs/
-          xz -z -9 linux-headers-*.deb
+          xz -z -9 *.deb
             
       - name: Resgatando a Imagem e Headers temporariamente
         uses: actions/upload-artifact@v4
@@ -72,7 +72,7 @@ jobs:
           # Não preserva o caminho de pastas, joga todos os arquivos na raiz do artefato
           include-hidden-files: false
           path: |
-            armbian-build/output/images/*.img.xz
+ #           armbian-build/output/images/*.img.xz
             armbian-build/output/images/*.xz
             armbian-build/output/debs/*.xz
 
