@@ -27,12 +27,12 @@ jobs:
             branch: current
             
           # --- Placas EDGE (3) ---
-          - board: bananapi
-            branch: edge
-          - board: aml-s9xx-box
-            branch: edge
-          - board: rk322x-box
-            branch: edge
+          #- board: bananapi
+          #  branch: edge
+          #- board: aml-s9xx-box
+          #  branch: edge
+          #- board: rk322x-box
+          #  branch: edge
 
     steps:
       - name: Preparando o Tradutor QEMU (Intel -> ARM)
