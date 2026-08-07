@@ -14,9 +14,8 @@ O foco atual é:
 
 | Workflow | Arquivo | Execução | O que faz | Dispositivos cobertos | Saída principal |
 | --- | --- | --- | --- | --- | --- |
-| Build Armbian Multi-Board (Trixie Minimal) Current e Edge | `.github/workflows/imgs.yaml` | Manual (`workflow_dispatch`) | Compila imagens Armbian minimalistas e pacotes de headers para cada combinação da matriz. | `bananapi`, `aml-s9xx-box`, `rk322x-box`, `aml-s805-mxq` na branch `current`. | Artefatos por placa/branch e release automática com arquivos `.xz`. |
+| Build Armbian Multi-Board (Trixie Minimal) Current e Edge | `.github/workflows/imgs.yaml` | Manual (`workflow_dispatch`) | Compila imagens Armbian minimalistas e pacotes de headers para cada combinação da matriz. | `bananapi`, `aml-s9xx-box`, `rk322x-box`, `aml-s805-mxq`, nas branches `current` e `edge` (8 combinações). | Artefatos por placa/branch e release na tag informada na execução, com os `.xz` das placas que compilaram. |
 | Build LibreELEC 9.2 (S805 - MXQ) | `.github/workflows/LE-s805.yml` | Manual (`workflow_dispatch`) | Compila LibreELEC dentro de um container Ubuntu 18.04 para reproduzir um ambiente compatível com o projeto upstream. | TV boxes S805/MXQ compatíveis com `PROJECT=S805` e `DEVICE=HD18Q`. | Artefato `LibreELEC-S805-Imagem` contendo `*.img.gz`. |
-| Check Runner Specs | `.github/workflows/runner-specs.yml` | Manual (`workflow_dispatch`) | Mostra CPU, memória, disco, sistema operacional e rede do runner. | Não compila placas; serve para diagnosticar o ambiente `ubuntu-latest`. | Logs do job na aba Actions. |
 
 ## Objetivo do repositório em mais detalhes
 
@@ -30,11 +29,12 @@ Compilar imagens para placas ARM costuma exigir bastante espaço em disco, depen
 
 ## Como executar pela aba Actions
 
-Todos os workflows atuais são manuais. Nenhum deles roda por `push`, `pull_request` ou agendamento.
+Os dois workflows atuais são manuais. Nenhum deles roda por `push`, `pull_request` ou agendamento.
 
 1. Abra este repositório no GitHub.
 2. Entre na aba **Actions**.
 3. Escolha um dos workflows no menu lateral.
+3.1. No workflow do Armbian, preencha o campo **Versão da Release** (ex.: `v1.0.0`).
 4. Clique em **Run workflow**.
 5. Selecione a branch que contém a versão do workflow que deseja executar.
 6. Clique novamente em **Run workflow** para iniciar.
@@ -43,13 +43,19 @@ Todos os workflows atuais são manuais. Nenhum deles roda por `push`, `pull_requ
 
 ### Parâmetros manuais disponíveis
 
-Os três workflows usam `workflow_dispatch`, mas **não definem campos `inputs` customizados**. Ao rodar manualmente pela aba Actions, o parâmetro selecionável pelo usuário é a **branch/ref do repositório** que contém o arquivo do workflow.
+O workflow do Armbian define dois `inputs`:
+
+| Input | Obrigatório | Padrão | Para que serve |
+| --- | --- | --- | --- |
+| `version` | sim | — | Vira a tag e o nome da release (ex.: `v1.0.0`). |
+| `prerelease` | não | `false` | Marca a release como pre-release. |
+
+O do LibreELEC não define `inputs`; o único parâmetro selecionável é a **branch/ref do repositório** que contém o arquivo do workflow.
 
 Os parâmetros de build estão fixos nos arquivos YAML:
 
-- Armbian: matriz de `board`/`branch`, `RELEASE=trixie`, `BUILD_MINIMAL=yes`, `BUILD_DESKTOP=no`, `EXPERT=yes`, `KERNEL_CONFIGURE=no` e `COMPRESS_OUTPUTIMAGE=xz`.
+- Armbian: matriz de `board` × `branch`, `RELEASE=trixie`, `BUILD_MINIMAL=yes`, `BUILD_DESKTOP=no`, `EXPERT=yes`, `KERNEL_CONFIGURE=no` e `COMPRESS_OUTPUTIMAGE=xz`.
 - LibreELEC: `PROJECT=S805`, `DEVICE=HD18Q` e `ARCH=arm`.
-- Runner specs: comandos fixos para listar informações do runner.
 
 Para mudar placa, release, branch do kernel, tipo de imagem ou dispositivo LibreELEC, edite o workflow correspondente em uma branch e execute essa branch pela aba Actions.
 
@@ -61,26 +67,27 @@ Workflow manual para compilar imagens Armbian minimalistas usando `armbian/build
 
 #### O que ele faz
 
-1. Habilita QEMU para plataformas `arm` e `arm64` com `docker/setup-qemu-action@v3`.
-2. Clona o repositório upstream `armbian/build` no diretório `armbian-build`.
-3. Executa `./compile.sh` para cada item da matriz.
-4. Ajusta permissões do diretório de saída.
-5. Compacta os pacotes `.deb` de headers com `xz -z -9`.
-6. Envia imagens e headers como artefatos temporários da execução.
-7. Em um job final, baixa todos os artefatos `Artefatos-*` e cria uma release do GitHub.
+1. Libera espaço em disco no runner (builds minimais estouram os ~21 GB livres com facilidade).
+2. Habilita QEMU para plataformas `arm` e `arm64` com `docker/setup-qemu-action@v3`.
+3. Clona o repositório upstream `armbian/build` no diretório `armbian-build`.
+4. Executa `./compile.sh` para cada item da matriz.
+5. Ajusta permissões do diretório de saída.
+6. Compacta os pacotes `.deb` com `xz -9` (busca recursiva, inclusive subpastas de `output/debs`).
+7. Organiza imagem e pacotes em `release-staging/<placa>-<branch>/` e envia como artefato temporário.
+8. Em um job final, baixa todos os artefatos `Artefatos-*` e cria uma release do GitHub.
 
 #### Placas e branches cobertas
 
-A matriz ativa cobre quatro combinações, todas com `branch: current`:
+A matriz é o produto de quatro placas por duas branches, ou seja **8 combinações**:
 
-| Board no workflow | Branch | Observação |
+| Board no workflow | Branches | Observação |
 | --- | --- | --- |
-| `bananapi` | `current` | Placa Banana Pi suportada pelo Armbian build framework. |
-| `aml-s9xx-box` | `current` | TV boxes Amlogic S9xx suportadas pelo Armbian. |
-| `rk322x-box` | `current` | TV boxes Rockchip RK322x suportadas pelo Armbian. |
-| `aml-s805-mxq` | `current` | TV boxes Amlogic S805/MXQ suportadas pelo Armbian. |
+| `bananapi` | `current`, `edge` | Placa Banana Pi, config suportada (`.conf`) no Armbian build framework. |
+| `aml-s9xx-box` | `current`, `edge` | TV boxes Amlogic S9xx (`.tvb`). |
+| `rk322x-box` | `current`, `edge` | TV boxes Rockchip RK322x (`.tvb`). |
+| `aml-s805-mxq` | `current`, `edge` | TV boxes Amlogic S805/MXQ (`.tvb`). |
 
-O YAML também contém entradas `edge` comentadas para `bananapi`, `aml-s9xx-box` e `rk322x-box`. Elas documentam a intenção de builds edge, mas **não são executadas** enquanto permanecerem comentadas.
+`fail-fast: false` mantém as demais combinações compilando quando uma quebra. As três placas `.tvb` não têm o mesmo nível de suporte do `bananapi`, então é esperado que alguma combinação (`edge`, em especial) falhe — a release sai mesmo assim, só sem ela.
 
 #### Parâmetros fixos de compilação
 
@@ -107,16 +114,21 @@ Durante o job `armbian-build`, cada combinação publica um artefato com o nome:
 Artefatos-<board>-<branch>
 ```
 
-Cada artefato contém:
+Cada artefato contém um único diretório `<placa>-<branch>/` com:
 
-- imagens Armbian em `armbian-build/output/images/*.xz`;
-- pacotes de headers em `armbian-build/output/debs/*.xz`.
+- a imagem Armbian (`*.img.xz`), já compactada pelo `COMPRESS_OUTPUTIMAGE=xz`;
+- os pacotes `.deb.xz`, renomeados para `<placa>-<branch>__<pacote>.deb.xz`.
 
-Depois que a matriz termina, o job `publish-release` baixa os artefatos em `artefatos-finais`, combina os arquivos e cria uma release com:
+O prefixo existe porque assets de release no GitHub são planos: sem ele, pacotes comuns às quatro placas (`armbian-firmware`, `armbian-config`) se sobrescreveriam entre si na release. O `.deb.xz` continua instalável normalmente — basta descompactar e usar `dpkg -i`; o nome do arquivo não importa para o `dpkg`.
 
-- tag `build-<número da execução>`;
-- nome `Armbian Trixie Minimal - Build #<número da execução>`;
+Depois que a matriz termina, o job `publish-release` roda com `if: ${{ !cancelled() }}`. **Esse é o ponto central do workflow**: sem isso, uma única placa quebrada marcaria o job da matriz como `failure` e o job de release seria pulado, jogando fora tudo que compilou. Ele baixa os artefatos em `artefatos-finais`, combina os diretórios e cria uma release com:
+
+- tag e nome vindos do input `version` informado na execução;
+- `prerelease` conforme o input de mesmo nome;
+- corpo listando, por placa, os arquivos publicados e seus tamanhos;
 - arquivos anexados vindos de `artefatos-finais/**/*.xz`.
+
+Se nenhuma placa compilar, o job falha explicitamente em vez de criar uma release vazia.
 
 ### 2. Build LibreELEC 9.2 S805 (`.github/workflows/LE-s805.yml`)
 
@@ -161,21 +173,6 @@ LibreELEC-AML/target/*.img.gz
 
 O artefato fica disponível na página da execução do workflow, na seção **Artifacts**.
 
-### 3. Check Runner Specs (`.github/workflows/runner-specs.yml`)
-
-Workflow manual de diagnóstico. Ele não gera imagem e não publica artefato; a saída esperada são os logs do job.
-
-#### O que ele mostra
-
-| Etapa | Comando | Uso |
-| --- | --- | --- |
-| CPU Info | `lscpu` | Conferir arquitetura, quantidade de CPUs e características do processador. |
-| Memory Info | `free -h` | Conferir memória disponível. |
-| Disk Space | `df -h` | Verificar espaço livre antes de builds grandes. |
-| OS Version | `cat /etc/os-release` | Confirmar a imagem do runner `ubuntu-latest`. |
-| Network Info | `ip addr` | Diagnosticar interfaces e conectividade básica. |
-
-Use este workflow antes ou depois de uma falha quando houver suspeita de limitação do runner, falta de espaço ou mudança no ambiente hospedado pelo GitHub.
 
 ## Pré-requisitos
 
@@ -199,7 +196,7 @@ permissions:
 
 Essa permissão é necessária para que `softprops/action-gh-release@v2` crie tags/releases e anexe os arquivos gerados. Se a política do repositório ou da organização restringir o token do GitHub Actions para somente leitura, a compilação pode terminar, mas a publicação da release falhará.
 
-Os workflows LibreELEC e runner specs não declaram permissões especiais no YAML atual. Eles usam as permissões padrão do `GITHUB_TOKEN` para a execução.
+O workflow LibreELEC não declara permissões especiais no YAML atual. Ele usa as permissões padrão do `GITHUB_TOKEN` para a execução.
 
 ## Limitações conhecidas
 
@@ -207,8 +204,9 @@ Os workflows LibreELEC e runner specs não declaram permissões especiais no YAM
 - Espaço em disco é um ponto crítico, especialmente no LibreELEC; por isso o workflow remove ferramentas pré-instaladas antes do build.
 - Os workflows dependem de projetos upstream. Mudanças em `armbian/build`, `dtechsrv/LibreELEC-AML`, pacotes APT ou imagens Docker podem quebrar builds sem alteração neste repositório.
 - Não há validação automática de boot nos dispositivos reais; um build concluído não garante que a imagem inicialize em todo hardware compatível nominalmente.
-- As entradas `edge` do workflow Armbian estão comentadas e não participam da matriz atual.
-- Não existem inputs manuais para trocar parâmetros pela interface do GitHub; as mudanças exigem edição do YAML.
+- As três placas `.tvb` (`aml-s9xx-box`, `rk322x-box`, `aml-s805-mxq`) não têm suporte de primeira classe no Armbian; falhas em `edge` são esperadas. Por isso a release publica o que compilou em vez de exigir a matriz inteira verde.
+- Fora `version` e `prerelease` no workflow Armbian, não há inputs manuais; trocar placa, release ou tipo de imagem exige editar o YAML.
+- O build do LibreELEC monta a própria toolchain e pode encostar no teto de 6h do runner hospedado, que mata o job sem gerar imagem.
 - O workflow LibreELEC usa `ubuntu:18.04` dentro do Docker por compatibilidade com o projeto, mas essa base é antiga e pode ter limitações de pacotes ou espelhos.
 - Artefatos de execução do GitHub Actions expiram conforme a política de retenção configurada no repositório/organização. As releases do workflow Armbian tendem a ser mais persistentes enquanto não forem removidas manualmente.
 
@@ -236,11 +234,10 @@ Os workflows LibreELEC e runner specs não declaram permissões especiais no YAM
 
 ### Exemplo 3: verificar o runner antes de investigar uma falha
 
-1. Abra **Actions**.
-2. Rode **Check Runner Specs**.
-3. Abra os logs do job `inspect-machine`.
-4. Confira principalmente `df -h` para espaço em disco e `free -h` para memória.
-5. Compare esses dados com a execução que falhou.
+1. Abra **Actions** e a execução que falhou.
+2. Abra o passo `Liberando espaço no Runner`; ele imprime `df -h /` antes e depois da limpeza.
+3. Compare o espaço livre com o de uma execução que deu certo.
+
 
 ### Exemplo 4: testar uma alteração de parâmetros
 
@@ -254,8 +251,7 @@ Os workflows LibreELEC e runner specs não declaram permissões especiais no YAM
 
 ### O build falhou por falta de espaço em disco
 
-- Rode **Check Runner Specs** para confirmar o espaço disponível.
-- Verifique o passo `Disk Space` (`df -h`).
+- Verifique a saída de `df -h /` no passo `Liberando espaço no Runner`.
 - No LibreELEC, confirme se a etapa de limpeza do runner executou corretamente.
 - Se necessário, remova mais diretórios não usados ou reduza a matriz do Armbian para compilar menos alvos por execução.
 
