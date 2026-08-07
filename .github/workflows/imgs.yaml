@@ -70,18 +70,40 @@ jobs:
             KERNEL_CONFIGURE=no \
             COMPRESS_OUTPUTIMAGE=xz
 
-      # Roda mesmo em cenários estranhos, mas nunca derruba o job:
-      # perder os headers não pode custar a imagem que já compilou.
-      - name: Corrigindo Permissões e Compactando os Headers (.deb) com XZ
+      # Tudo vai para release-staging/<placa>-<branch>/, para que os 8 builds
+      # possam ser mesclados depois sem um sobrescrever o .deb do outro.
+      - name: Compactando os Headers (.deb) e organizando por placa
         if: success()
-        continue-on-error: true
         run: |
+          set -euo pipefail
           sudo chown -R "$USER:$USER" armbian-build/output/
-          if compgen -G "armbian-build/output/debs/*.deb" > /dev/null; then
-            xz -z -9 -T0 armbian-build/output/debs/*.deb
+          DEST="release-staging/${{ matrix.board }}-${{ matrix.branch }}"
+          mkdir -p "$DEST"
+
+          # A imagem já sai em .xz por causa do COMPRESS_OUTPUTIMAGE
+          find armbian-build/output/images -maxdepth 1 -type f -name '*.xz' \
+            -exec cp -t "$DEST" {} +
+
+          # Headers e demais pacotes. Perder os .deb não pode custar a imagem
+          # que já compilou, então daqui pra baixo falha vira aviso.
+          set +e
+          PREFIX="${{ matrix.board }}-${{ matrix.branch }}"
+          if [ -d armbian-build/output/debs ]; then
+            find armbian-build/output/debs -type f -name '*.deb' -print0 \
+              | xargs -0 -r xz -9 -T0 \
+              || echo "::warning::Falha ao compactar algum .deb de $PREFIX"
+            # Assets de release no GitHub são planos: sem o prefixo, pacotes
+            # comuns a várias placas (armbian-firmware, armbian-config...)
+            # se sobrescreveriam entre si.
+            find armbian-build/output/debs -type f -name '*.deb.xz' -print0 \
+              | while IFS= read -r -d '' f; do
+                  cp "$f" "$DEST/${PREFIX}__$(basename "$f")"
+                done
           else
-            echo "Nenhum .deb gerado para ${{ matrix.board }}/${{ matrix.branch }}, seguindo em frente."
+            echo "::warning::Sem output/debs para $PREFIX"
           fi
+
+          ls -la "$DEST"
 
       - name: Resgatando a Imagem e Headers temporariamente
         if: success()
@@ -92,9 +114,7 @@ jobs:
           # Sem imagem não há o que publicar; com imagem e sem headers, publica assim mesmo
           if-no-files-found: error
           retention-days: 1
-          path: |
-            armbian-build/output/images/*.xz
-            armbian-build/output/debs/*.xz
+          path: release-staging
 
   publish-release:
     name: Publicar na Aba Releases
@@ -116,34 +136,42 @@ jobs:
         id: check
         run: |
           mkdir -p artefatos-finais
-          ls -la artefatos-finais/
+          find artefatos-finais -type f | sort
 
-          if ! compgen -G "artefatos-finais/**/*.xz" > /dev/null 2>&1 \
-             && ! compgen -G "artefatos-finais/*.xz" > /dev/null 2>&1; then
-            echo "has_files=false" >> "$GITHUB_OUTPUT"
+          if [ -z "$(find artefatos-finais -type f -name '*.xz' -print -quit)" ]; then
             echo "::error::Nenhuma placa compilou com sucesso. Nada a publicar."
             exit 1
           fi
-          echo "has_files=true" >> "$GITHUB_OUTPUT"
 
           {
             echo "Compilação automatizada via GitHub Actions das imagens minimalistas"
             echo "(Debian Trixie / BUILD_MINIMAL) e headers, nas branches \`current\` e \`edge\`."
             echo
             echo "Resultado da matriz de build: **${{ needs.armbian-build.result }}**"
-            echo "(builds que falharam simplesmente não aparecem na lista abaixo)."
             echo
-            echo "### Arquivos publicados"
+            echo "### Placas publicadas"
             echo
-            find artefatos-finais -name '*.xz' -printf '%f\t%s\n' \
-              | sort \
-              | awk -F'\t' '{ printf "- `%s` (%.1f MiB)\n", $1, $2/1048576 }'
+
+            # Cada build ficou em seu próprio diretório <placa>-<branch>/
+            for dir in artefatos-finais/*/; do
+              [ -d "$dir" ] || continue
+              echo "<details><summary><b>$(basename "$dir")</b></summary>"
+              echo
+              find "$dir" -type f -name '*.xz' -printf '%f\t%s\n' \
+                | sort \
+                | awk -F'\t' '{ printf "- `%s` (%.1f MiB)\n", $1, $2/1048576 }'
+              echo
+              echo "</details>"
+            done
+
+            echo
+            echo "> Combinações que não aparecem acima falharam na compilação;"
+            echo "> veja os logs da run para o motivo."
           } > release-body.md
 
           cat release-body.md
 
       - name: Criar a Release no GitHub
-        if: steps.check.outputs.has_files == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.version }}
@@ -151,6 +179,4 @@ jobs:
           body_path: release-body.md
           prerelease: ${{ inputs.prerelease }}
           fail_on_unmatched_files: false
-          files: |
-            artefatos-finais/*.xz
-            artefatos-finais/**/*.xz
+          files: artefatos-finais/**/*.xz

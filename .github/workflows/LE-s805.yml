@@ -7,12 +7,20 @@ jobs:
   build-libreelec:
     name: Compilando LibreELEC S805
     runs-on: ubuntu-latest
+    # Build do zero (monta a própria toolchain). O teto do runner hospedado
+    # é 6h; se estourar, o job é morto sem gerar imagem.
+    timeout-minutes: 360
 
     steps:
       - name: Liberando espaço no Runner (Essencial)
         run: |
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+                      /usr/local/.ghcup "$AGENT_TOOLSDIRECTORY"
           sudo apt-get clean
+          docker image prune -af
+          df -h /
 
       - name: Clonando LibreELEC-AML (dtechsrv)
         uses: actions/checkout@v4
@@ -22,17 +30,34 @@ jobs:
 
       - name: A MÁGICA - Compilando isolado no Ubuntu 18.04 (Sem Root)
         run: |
-          docker run --rm -v ${{ github.workspace }}:/workspace -w /workspace ubuntu:18.04 /bin/bash -c "
-            apt-get update && \
-            apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc libxml-parser-perl sudo libncurses5-dev libjson-perl gawk && \
-            useradd -m -s /bin/bash builder && \
-            chown -R builder:builder /workspace && \
-            sudo -u builder bash -c 'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm make image' && \
-            chmod -R 777 /workspace
-          "
+          # Script por stdin em vez de -c "...": evita que o shell do runner
+          # expanda $ e aspas do conteúdo antes do container ver.
+          cat > /tmp/build-le.sh <<'SCRIPT'
+          set -e
+          # O workspace volta a ser gravável para o runner mesmo se o build
+          # falhar; sem isso os arquivos ficam do uid do builder e a limpeza
+          # pós-job (e a run seguinte) quebra com erro de permissão.
+          trap 'chmod -R a+rwX /workspace || true' EXIT
+
+          apt-get update
+          apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip \
+            lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc \
+            libxml-parser-perl sudo libncurses5-dev libjson-perl gawk
+
+          useradd -m -s /bin/bash builder
+          chown -R builder:builder /workspace
+          sudo -u builder bash -c \
+            'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm make image'
+          SCRIPT
+
+          docker run --rm \
+            -v "${{ github.workspace }}:/workspace" \
+            -w /workspace \
+            ubuntu:18.04 /bin/bash -s < /tmp/build-le.sh
 
       - name: Resgatando o Arquivo
         uses: actions/upload-artifact@v4
         with:
           name: LibreELEC-S805-Imagem
+          if-no-files-found: error
           path: LibreELEC-AML/target/*.img.gz
