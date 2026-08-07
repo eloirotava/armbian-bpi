@@ -84,6 +84,14 @@ jobs:
           find armbian-build/output/images -maxdepth 1 -type f -name '*.xz' \
             -exec cp -t "$DEST" {} +
 
+          # Sem .img.xz não há placa entregue, só pacotes soltos. O compile.sh
+          # pode terminar com 0 nesse caso (já aconteceu com rk322x-box), então
+          # a falha precisa ser explícita para a combinação aparecer vermelha.
+          if [ -z "$(find "$DEST" -maxdepth 1 -type f -name '*.img.xz' -print -quit)" ]; then
+            echo "::error::${{ matrix.board }}/${{ matrix.branch }} não gerou imagem (.img.xz)."
+            exit 1
+          fi
+
           # Headers e demais pacotes. Perder os .deb não pode custar a imagem
           # que já compilou, então daqui pra baixo falha vira aviso.
           set +e
