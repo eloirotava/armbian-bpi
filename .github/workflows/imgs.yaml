@@ -1,7 +1,17 @@
 name: Build Armbian Multi-Board (Trixie Minimal) Current e Edge
 
 on:
-  workflow_dispatch: 
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão da Release (ex: v1.0.0). Vira a tag e o nome da release."
+        required: true
+        type: string
+      prerelease:
+        description: "Marcar a release como pre-release"
+        required: false
+        type: boolean
+        default: false
 
 # CRÍTICO: Dá permissão ao GitHub Actions para criar a Release
 permissions:
@@ -11,30 +21,31 @@ jobs:
   armbian-build:
     name: Compilando ${{ matrix.branch }} (${{ matrix.board }})
     runs-on: ubuntu-latest
-    
+
     strategy:
-      fail-fast: false 
+      # Uma placa quebrada não pode derrubar as outras 7
+      fail-fast: false
       matrix:
-        include:
-          # --- Placas CURRENT (4) ---
-          - board: bananapi
-            branch: current
-          - board: aml-s9xx-box
-            branch: current
-          - board: rk322x-box
-            branch: current
-          - board: aml-s805-mxq
-            branch: current
-            
-          # --- Placas EDGE (3) ---
-          #- board: bananapi
-          #  branch: edge
-          #- board: aml-s9xx-box
-          #  branch: edge
-          #- board: rk322x-box
-          #  branch: edge
+        board:
+          - bananapi
+          - aml-s9xx-box
+          - rk322x-box
+          - aml-s805-mxq
+        branch:
+          - current
+          - edge
 
     steps:
+      - name: Liberando espaço no Runner (Essencial)
+        run: |
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+                      /usr/local/.ghcup "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          docker image prune -af
+          df -h /
+
       - name: Preparando o Tradutor QEMU (Intel -> ARM)
         uses: docker/setup-qemu-action@v3
         with:
@@ -58,29 +69,41 @@ jobs:
             EXPERT=yes \
             KERNEL_CONFIGURE=no \
             COMPRESS_OUTPUTIMAGE=xz
-            
+
+      # Roda mesmo em cenários estranhos, mas nunca derruba o job:
+      # perder os headers não pode custar a imagem que já compilou.
       - name: Corrigindo Permissões e Compactando os Headers (.deb) com XZ
+        if: success()
+        continue-on-error: true
         run: |
-          sudo chown -R $USER:$USER armbian-build/output/
-          cd armbian-build/output/debs/
-          xz -z -9 *.deb
-            
+          sudo chown -R "$USER:$USER" armbian-build/output/
+          if compgen -G "armbian-build/output/debs/*.deb" > /dev/null; then
+            xz -z -9 -T0 armbian-build/output/debs/*.deb
+          else
+            echo "Nenhum .deb gerado para ${{ matrix.board }}/${{ matrix.branch }}, seguindo em frente."
+          fi
+
       - name: Resgatando a Imagem e Headers temporariamente
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Artefatos-${{ matrix.board }}-${{ matrix.branch }}
-          # Não preserva o caminho de pastas, joga todos os arquivos na raiz do artefato
           include-hidden-files: false
+          # Sem imagem não há o que publicar; com imagem e sem headers, publica assim mesmo
+          if-no-files-found: error
+          retention-days: 1
           path: |
             armbian-build/output/images/*.xz
             armbian-build/output/debs/*.xz
 
-  # JOB FINAL: Só roda quando o "armbian-build" terminar as 7 placas
   publish-release:
     name: Publicar na Aba Releases
     needs: armbian-build
     runs-on: ubuntu-latest
-    
+    # O ponto central: publica o que compilou, mesmo que placas tenham falhado.
+    # Só não roda se o workflow inteiro for cancelado.
+    if: ${{ !cancelled() }}
+
     steps:
       - name: Baixar todos os artefatos gerados
         uses: actions/download-artifact@v4
@@ -89,14 +112,45 @@ jobs:
           pattern: Artefatos-*
           merge-multiple: true
 
-      - name: Inspecionar arquivos para debug
-        run: ls -la artefatos-finais/
+      - name: Inspecionar arquivos e montar o resumo do build
+        id: check
+        run: |
+          mkdir -p artefatos-finais
+          ls -la artefatos-finais/
+
+          if ! compgen -G "artefatos-finais/**/*.xz" > /dev/null 2>&1 \
+             && ! compgen -G "artefatos-finais/*.xz" > /dev/null 2>&1; then
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+            echo "::error::Nenhuma placa compilou com sucesso. Nada a publicar."
+            exit 1
+          fi
+          echo "has_files=true" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "Compilação automatizada via GitHub Actions das imagens minimalistas"
+            echo "(Debian Trixie / BUILD_MINIMAL) e headers, nas branches \`current\` e \`edge\`."
+            echo
+            echo "Resultado da matriz de build: **${{ needs.armbian-build.result }}**"
+            echo "(builds que falharam simplesmente não aparecem na lista abaixo)."
+            echo
+            echo "### Arquivos publicados"
+            echo
+            find artefatos-finais -name '*.xz' -printf '%f\t%s\n' \
+              | sort \
+              | awk -F'\t' '{ printf "- `%s` (%.1f MiB)\n", $1, $2/1048576 }'
+          } > release-body.md
+
+          cat release-body.md
 
       - name: Criar a Release no GitHub
+        if: steps.check.outputs.has_files == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "build-${{ github.run_number }}"
-          name: "Armbian Trixie Minimal - Build #${{ github.run_number }}"
-          body: "Compilação automatizada via GitHub Actions das imagens minimalistas e headers (current e edge)."
-          # Atualizado para buscar recursivamente caso arquivos caiam em subpastas
-          files: artefatos-finais/**/*.xz
+          tag_name: ${{ inputs.version }}
+          name: "Armbian Trixie Minimal - ${{ inputs.version }}"
+          body_path: release-body.md
+          prerelease: ${{ inputs.prerelease }}
+          fail_on_unmatched_files: false
+          files: |
+            artefatos-finais/*.xz
+            artefatos-finais/**/*.xz
