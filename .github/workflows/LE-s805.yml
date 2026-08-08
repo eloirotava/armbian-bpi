@@ -2,31 +2,59 @@ name: Build LibreELEC 9.2 (S805 - MXQ)
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Versão da Release (a do Armbian usa v0.0.1; use um prefixo pra não colidir)"
+        required: true
+        type: string
+        default: libreelec-v0.0.1
+      prerelease:
+        description: "Marcar a release como pre-release"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
 
 jobs:
   build-libreelec:
     name: Compilando LibreELEC S805
     runs-on: ubuntu-latest
-    # Build do zero (monta a própria toolchain). O teto do runner hospedado
-    # é 6h; se estourar, o job é morto sem gerar imagem.
+    # Build do zero (monta a própria toolchain). 360 é o teto do runner
+    # hospedado; se estourar, o job é morto sem gerar imagem.
     timeout-minutes: 360
 
     steps:
       - name: Liberando espaço no Runner (Essencial)
         run: |
-          df -h /
+          echo "--- antes ---"; df -h / /mnt
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
-                      /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
-                      /usr/local/.ghcup "$AGENT_TOOLSDIRECTORY"
+                      /opt/hostedtoolcache /usr/local/share/boost \
+                      /usr/local/.ghcup /usr/share/swift /usr/local/share/powershell \
+                      "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get purge -y '^llvm-.*' '^mongodb-.*' '^mysql-.*' azure-cli \
+                                google-cloud-cli firefox powershell 2>/dev/null || true
+          sudo apt-get autoremove -y
           sudo apt-get clean
           docker image prune -af
-          df -h /
+          echo "--- depois ---"; df -h / /mnt
 
       - name: Clonando LibreELEC-AML (dtechsrv)
         uses: actions/checkout@v4
         with:
           repository: dtechsrv/LibreELEC-AML
           path: LibreELEC-AML
+
+      # O runner tem duas partições: / com ~20-45GB livres e /mnt com ~70GB.
+      # Um build completo do LibreELEC (toolchain + todos os pacotes) não cabe
+      # com folga em /, então a árvore inteira vai pra /mnt.
+      - name: Movendo a árvore de build para /mnt (partição maior)
+        run: |
+          sudo mkdir -p /mnt/le-build
+          sudo chown -R "$USER:$USER" /mnt/le-build
+          mv LibreELEC-AML /mnt/le-build/
+          df -h / /mnt
 
       - name: A MÁGICA - Compilando isolado no Ubuntu 18.04 (Sem Root)
         run: |
@@ -42,22 +70,65 @@ jobs:
           apt-get update
           apt-get install -y gcc make git unzip wget xz-utils g++ bc gperf zip \
             lzop patchutils m4 default-jre python python3 xfonts-utils xsltproc \
-            libxml-parser-perl sudo libncurses5-dev libjson-perl gawk
+            libxml-parser-perl sudo libncurses5-dev libjson-perl gawk \
+            ccache rsync file diffutils
 
           useradd -m -s /bin/bash builder
           chown -R builder:builder /workspace
-          sudo -u builder bash -c \
-            'cd /workspace/LibreELEC-AML && PROJECT=S805 DEVICE=HD18Q ARCH=arm make image'
+
+          # O LibreELEC já autodetecta nproc; setar explícito é só garantia
+          # de não cair em -j1 se a detecção falhar dentro do container.
+          JOBS="$(nproc)"
+          echo "Compilando com CONCURRENCY_MAKE_LEVEL=$JOBS"
+
+          # 'env' na frente porque o env_reset do sudoers descarta atribuições
+          # feitas direto na linha do sudo.
+          sudo -u builder env \
+            CONCURRENCY_MAKE_LEVEL="$JOBS" \
+            PROJECT=S805 DEVICE=HD18Q ARCH=arm \
+            bash -c 'cd /workspace/LibreELEC-AML && make image'
           SCRIPT
 
           docker run --rm \
-            -v "${{ github.workspace }}:/workspace" \
+            -v /mnt/le-build:/workspace \
             -w /workspace \
             ubuntu:18.04 /bin/bash -s < /tmp/build-le.sh
+
+      - name: Recolhendo a imagem gerada
+        id: collect
+        run: |
+          set -euo pipefail
+          mkdir -p saida
+          # O layout do target/ varia entre versões; pega recursivo.
+          find /mnt/le-build/LibreELEC-AML/target -type f \
+            \( -name '*.img.gz' -o -name '*.tar' -o -name '*.sha256' \) \
+            -exec cp -t saida/ {} + 2>/dev/null || true
+
+          if [ -z "$(find saida -type f -name '*.img.gz' -print -quit)" ]; then
+            echo "::error::Build terminou sem gerar .img.gz."
+            find /mnt/le-build/LibreELEC-AML/target -type f 2>/dev/null | head -30 || true
+            exit 1
+          fi
+          ls -la saida/
 
       - name: Resgatando o Arquivo
         uses: actions/upload-artifact@v4
         with:
           name: LibreELEC-S805-Imagem
           if-no-files-found: error
-          path: LibreELEC-AML/target/*.img.gz
+          path: saida/*
+
+      - name: Criar a Release no GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: "LibreELEC 9.2 S805/MXQ - ${{ inputs.version }}"
+          body: |
+            LibreELEC compilado a partir de `dtechsrv/LibreELEC-AML`
+            com `PROJECT=S805 DEVICE=HD18Q ARCH=arm`.
+
+            Build isolado em container `ubuntu:18.04` para reproduzir o
+            ambiente esperado pelo projeto upstream.
+          prerelease: ${{ inputs.prerelease }}
+          fail_on_unmatched_files: false
+          files: saida/*
