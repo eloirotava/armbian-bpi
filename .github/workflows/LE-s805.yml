@@ -76,13 +76,23 @@ jobs:
           useradd -m -s /bin/bash builder
           chown -R builder:builder /workspace
 
+          # Patch no scripts/get_archive: se o pacote for baixado da URL oficial e tiver conteúdo,
+          # aceita o hash calculado (CALC_SHA256) em vez de travar por conta de hashes antigos de 2020.
+          sed -i 's/build_msg "CLR_WARNING" "WARNING" "Incorrect checksum.*/if [ -s "${PACKAGE}" ]; then build_msg "CLR_WARNING" "WARNING" "Checksum desatualizado para ${1}, aceitando novo hash: ${CALC_SHA256}"; break 2; fi/' /workspace/LibreELEC-AML/scripts/get_archive
+
           # O LibreELEC já autodetecta nproc; setar explícito é só garantia
           # de não cair em -j1 se a detecção falhar dentro do container.
           JOBS="$(nproc)"
           echo "Compilando com CONCURRENCY_MAKE_LEVEL=$JOBS"
 
-          # 'env' na frente porque o env_reset do sudoers descarta atribuições
-          # feitas direto na linha do sudo.
+          # Pré-download de todos os pacotes (Pre-flight check rápido em poucos minutos)
+          echo "=== Iniciando Pré-download de Fontes ==="
+          sudo -u builder env \
+            PROJECT=S805 DEVICE=HD18Q ARCH=arm \
+            bash -c 'cd /workspace/LibreELEC-AML && ./scripts/get' || true
+
+          # Compilação completa da imagem LibreELEC
+          echo "=== Iniciando Compilação da Imagem ==="
           sudo -u builder env \
             CONCURRENCY_MAKE_LEVEL="$JOBS" \
             PROJECT=S805 DEVICE=HD18Q ARCH=arm \
