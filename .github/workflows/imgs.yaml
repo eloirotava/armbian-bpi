@@ -21,6 +21,12 @@ jobs:
   armbian-build:
     name: Compilando ${{ matrix.branch }} (${{ matrix.board }})
     runs-on: ubuntu-latest
+    # O Armbian lista KERNEL_TARGET='current' para o aml-s805-mxq, então edge
+    # falha em ~1min. A combinação fica na matriz de propósito: se o upstream
+    # adicionar edge um dia, ela passa a compilar sem alteração aqui. Até lá,
+    # a falha dela não pode pintar a run inteira de vermelho, senão uma falha
+    # real de outra placa vira ruído.
+    continue-on-error: ${{ matrix.board == 'aml-s805-mxq' && matrix.branch == 'edge' }}
 
     strategy:
       # Uma placa quebrada não pode derrubar as outras 7
