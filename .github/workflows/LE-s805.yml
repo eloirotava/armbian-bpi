@@ -89,7 +89,9 @@ jobs:
             bash -c 'cd /workspace/LibreELEC-AML && make image'
           SCRIPT
 
-          docker run --rm \
+          # -i é obrigatório: sem ele o docker não anexa stdin, o 'bash -s'
+          # lê EOF na hora e o container sai 0 sem executar nada.
+          docker run --rm -i \
             -v /mnt/le-build:/workspace \
             -w /workspace \
             ubuntu:18.04 /bin/bash -s < /tmp/build-le.sh
